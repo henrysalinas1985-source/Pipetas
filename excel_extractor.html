@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+<input type="file" id="file" />
+<pre id="output" style="white-space: pre-wrap; font-family: monospace;"></pre>
+<script>
+document.getElementById('file').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    const arrayBuffer = await file.arrayBuffer();
+    const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+    const firstSheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[firstSheetName];
+    
+    const rawData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+    document.getElementById('output').innerText = JSON.stringify(rawData.slice(0, 3), null, 2);
+});
+</script>
+</body>
+</html>
