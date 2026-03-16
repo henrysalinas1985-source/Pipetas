@@ -166,12 +166,7 @@ if (importModalBtn && importFileInput) {
         btn.onclick = () => {
             targetImportSector = btn.getAttribute('data-sector');
             importModalOverlay.style.display = 'none';
-            
-            if (importMode === 'pdf') {
-                importFileInput.click();
-            } else if (importMode === 'excel' && importExcelInput) {
-                importExcelInput.click();
-            }
+            importFileInput.click();
         };
     });
     
@@ -266,10 +261,7 @@ if (importModalBtn && importFileInput) {
 
 // ================= EXCEL IMPORT LOGIC =================
 if (importExcelBtn && importExcelInput) {
-    importExcelBtn.onclick = () => {
-        importMode = 'excel';
-        if (importModalOverlay) importModalOverlay.style.display = 'flex';
-    };
+    importExcelBtn.onclick = () => importExcelInput.click();
     
     importExcelInput.onchange = async (e) => {
         const file = e.target.files[0];
@@ -293,35 +285,34 @@ if (importExcelBtn && importExcelInput) {
             const currentData = api.getData();
             
             for (let row of rawData) {
-                // Mapeo sugerido
-                // Sector = "Unidad"
-                // Serie = "Campo Equipo"
-                // Rango = "Rango"
-                // Modelo = "Canales o Tipo"
-                // Calibracion = "Fecha de calibración"
-                // Codigo Interno = "Ubicación tecnica"
+                // Mapeo sugerido (acepta el formato anterior de Terumo o el exportado por la app)
+                let rawSerie = String(row["Campo Equipo"] || row["N° Serie"] || "").trim();
+                let parsedSectorFromExcel = String(row["Unidad"] || row["Sector"] || "").trim() || "S/D";
+                let modeloRaw = String(row["Canales o Tipo"] || row["Modelo"] || "").trim().toUpperCase();
+                let rawRango = String(row["Rango"] || row["Volumen"] || "").trim();
+                let rawCodigo = String(row["Ubicación tecnica"] || row["Código Interno"] || "").trim();
+                let rawCertificado = String(row["Certificado"] || "").trim();
+                let calibDateVal = row["Fecha de calibración"] || row["Calibración"];
+                let vencDateVal = row["Vencimiento"];
                 
-                let rawSerie = String(row["Campo Equipo"] || "").trim();
                 if (!rawSerie) continue; // Si no hay serie no agregamos nada
                 
                 // Limpiar prefijos de serie comunes
                 rawSerie = rawSerie.replace(/^(PIPETA-|PIP-|MIC-|S\/N:\s*)/i, '').trim();
                 
                 // Chequear si ya existe
-                const exists = currentData.some(item => item.serie === rawSerie || item.codigo_interno === String(row["Ubicación tecnica"] || "").trim());
-                
-                let parsedSectorFromExcel = String(row["Unidad"] || "").trim() || "S/D";
+                const exists = currentData.some(item => item.serie === rawSerie || (rawCodigo && item.codigo_interno === rawCodigo));
+
                 let finalSector = targetImportSector || parsedSectorFromExcel;
 
                 if (!exists) {
                     // Procesar Modelo/Canales
-                    let modeloRaw = String(row["Canales o Tipo"] || "").trim().toUpperCase();
                     let finalModelo = modeloRaw;
                     if (modeloRaw === "1") finalModelo = "MONOCANAL";
                     else if (modeloRaw === "8" || modeloRaw === "12") finalModelo = "MULTICANAL";
                     
                     // Procesar Rango
-                    let finalVolumen = String(row["Rango"] || "").trim();
+                    let finalVolumen = rawRango;
                     if (finalVolumen && !finalVolumen.includes("µl") && !finalVolumen.includes("ul") && finalModelo !== "DISPENSER") {
                         finalVolumen += " µl";
                     }
@@ -330,27 +321,21 @@ if (importExcelBtn && importExcelInput) {
                     let calibDateStr = "";
                     let vencDateStr = "";
                     
-                    if (row["Fecha de calibración"]) {
-                        const dateVal = row["Fecha de calibración"];
-                        // SheetJS sometimes parses dates directly to JS Date objects if `cellDates: true`
+                    // Procesar Fecha de Calibración
+                    if (calibDateVal) {
+                        const dateVal = calibDateVal;
                         if (dateVal instanceof Date) {
                             const dStr = dateVal.getDate().toString().padStart(2, '0');
                             const mStr = (dateVal.getMonth() + 1).toString().padStart(2, '0');
                             calibDateStr = `${dStr}/${mStr}/${dateVal.getFullYear()}`;
-                            
-                            // Sumar 1 año para vencimiento
-                            const vYear = dateVal.getFullYear() + 1;
-                            vencDateStr = `${dStr}/${mStr}/${vYear}`;
+                            vencDateStr = `${dStr}/${mStr}/${dateVal.getFullYear() + 1}`;
                         } else if (typeof dateVal === 'string') {
-                            // Si vino como string "25/07/2024"
                             const parts = dateVal.split(/[-\/.]/);
                             if (parts.length === 3) {
-                                // Asumimos DD/MM/YYYY por el formato local de Excel
                                 let day = parseInt(parts[0]);
                                 let month = parseInt(parts[1]);
                                 let year = parseInt(parts[2]);
-                                
-                                if (year < 100) year += 2000; // Por si viene "24" en vez de "2024"
+                                if (year < 100) year += 2000;
                                 
                                 const dStr = day.toString().padStart(2, '0');
                                 const mStr = month.toString().padStart(2, '0');
@@ -361,17 +346,28 @@ if (importExcelBtn && importExcelInput) {
                             }
                         }
                     }
+
+                    // Si en el Excel ya venía la fecha de vencimiento explícita (del export), la usamos.
+                    if (vencDateVal) {
+                        if (vencDateVal instanceof Date) {
+                            const dStr = vencDateVal.getDate().toString().padStart(2, '0');
+                            const mStr = (vencDateVal.getMonth() + 1).toString().padStart(2, '0');
+                            vencDateStr = `${dStr}/${mStr}/${vencDateVal.getFullYear()}`;
+                        } else if (typeof vencDateVal === 'string') {
+                            vencDateStr = vencDateVal;
+                        }
+                    }
                     
                     api.addItem({
                         serie: rawSerie,
-                        marca: "S/D", // Por defecto
+                        marca: String(row["Marca"] || "S/D"), // "Marca" might be available from our export
                         modelo: finalModelo || "S/D",
                         volumen: finalVolumen || "S/D",
                         sector: finalSector,
-                        codigo_interno: String(row["Ubicación tecnica"] || "").trim(),
+                        codigo_interno: rawCodigo,
                         calibracion: calibDateStr,
                         vencimiento: vencDateStr,
-                        certificado: ""
+                        certificado: rawCertificado
                     });
                     
                     importedCount++;
@@ -793,7 +789,8 @@ function exportToPDF(customFilename) {
         const matchesSearch = 
             item.serie.toLowerCase().includes(searchVal) || 
             item.marca.toLowerCase().includes(searchVal) ||
-            item.modelo.toLowerCase().includes(searchVal);
+            item.modelo.toLowerCase().includes(searchVal) ||
+            item.sector.toLowerCase().includes(searchVal);
         const matchesSector = !sectorVal || item.sector === sectorVal;
         return matchesSearch && matchesSector;
     });
@@ -888,6 +885,52 @@ window.addEventListener('click', (e) => {
         modalPdfOverlay.style.display = 'none';
     }
 });
+
+// Excel Export logic
+if (document.getElementById('export-excel-btn')) {
+    document.getElementById('export-excel-btn').onclick = () => {
+        const data = api.getData();
+        const searchVal = searchText.value.toLowerCase();
+        const sectorVal = filterSector.value;
+
+        const filteredData = data.filter(item => {
+            const matchesSearch = 
+                item.serie.toLowerCase().includes(searchVal) || 
+                item.marca.toLowerCase().includes(searchVal) ||
+                item.modelo.toLowerCase().includes(searchVal) ||
+                item.sector.toLowerCase().includes(searchVal);
+            const matchesSector = !sectorVal || item.sector === sectorVal;
+            return matchesSearch && matchesSector;
+        });
+
+        if (filteredData.length === 0) {
+            alert('No hay datos para exportar.');
+            return;
+        }
+
+        const exportData = filteredData.map(item => ({
+            "N° Serie": item.serie,
+            "Marca": item.marca,
+            "Modelo": item.modelo,
+            "Volumen": item.volumen,
+            "Sector": item.sector,
+            "Código Interno": item.codigo_interno || "",
+            "Calibración": item.calibracion || "",
+            "Vencimiento": item.vencimiento || "",
+            "Certificado": item.certificado || ""
+        }));
+
+        try {
+            const worksheet = XLSX.utils.json_to_sheet(exportData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Pipetas");
+            XLSX.writeFile(workbook, `Reporte_Pipetas_${new Date().toISOString().split('T')[0]}.xlsx`);
+        } catch (e) {
+            console.error(e);
+            alert('Hubo un error al generar el archivo Excel.');
+        }
+    };
+}
 
 // Initial Load
 updateSectorFilter();
