@@ -89,6 +89,7 @@ const importExcelBtn = document.getElementById('import-excel-btn');
 const importExcelInput = document.getElementById('import-excel-input');
 
 let targetImportSector = null;
+let importMode = 'pdf'; // 'pdf' or 'excel'
 
 // Configuración del worker de PDF.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
@@ -150,6 +151,7 @@ if (attachBtn) {
 
 if (importModalBtn && importFileInput) {
     importModalBtn.onclick = () => {
+        importMode = 'pdf';
         if (importModalOverlay) importModalOverlay.style.display = 'flex';
     };
 
@@ -163,8 +165,13 @@ if (importModalBtn && importFileInput) {
     sectorImportBtns.forEach(btn => {
         btn.onclick = () => {
             targetImportSector = btn.getAttribute('data-sector');
-            importFileInput.click();
             importModalOverlay.style.display = 'none';
+            
+            if (importMode === 'pdf') {
+                importFileInput.click();
+            } else if (importMode === 'excel' && importExcelInput) {
+                importExcelInput.click();
+            }
         };
     });
     
@@ -259,7 +266,10 @@ if (importModalBtn && importFileInput) {
 
 // ================= EXCEL IMPORT LOGIC =================
 if (importExcelBtn && importExcelInput) {
-    importExcelBtn.onclick = () => importExcelInput.click();
+    importExcelBtn.onclick = () => {
+        importMode = 'excel';
+        if (importModalOverlay) importModalOverlay.style.display = 'flex';
+    };
     
     importExcelInput.onchange = async (e) => {
         const file = e.target.files[0];
@@ -300,6 +310,9 @@ if (importExcelBtn && importExcelInput) {
                 // Chequear si ya existe
                 const exists = currentData.some(item => item.serie === rawSerie || item.codigo_interno === String(row["Ubicación tecnica"] || "").trim());
                 
+                let parsedSectorFromExcel = String(row["Unidad"] || "").trim() || "S/D";
+                let finalSector = targetImportSector || parsedSectorFromExcel;
+
                 if (!exists) {
                     // Procesar Modelo/Canales
                     let modeloRaw = String(row["Canales o Tipo"] || "").trim().toUpperCase();
@@ -354,7 +367,7 @@ if (importExcelBtn && importExcelInput) {
                         marca: "S/D", // Por defecto
                         modelo: finalModelo || "S/D",
                         volumen: finalVolumen || "S/D",
-                        sector: String(row["Unidad"] || "").trim() || "S/D",
+                        sector: finalSector,
                         codigo_interno: String(row["Ubicación tecnica"] || "").trim(),
                         calibracion: calibDateStr,
                         vencimiento: vencDateStr,
@@ -374,6 +387,7 @@ if (importExcelBtn && importExcelInput) {
         importExcelBtn.innerText = originalText;
         importExcelBtn.style.opacity = "1";
         importExcelInput.value = ''; // clean input
+        targetImportSector = null; // reset
         
         if (importedCount > 0) {
             updateSectorFilter();
@@ -548,7 +562,8 @@ function renderList() {
         const matchesSearch = 
             item.serie.toLowerCase().includes(searchVal) || 
             item.marca.toLowerCase().includes(searchVal) ||
-            item.modelo.toLowerCase().includes(searchVal);
+            item.modelo.toLowerCase().includes(searchVal) ||
+            item.sector.toLowerCase().includes(searchVal);
         const matchesSector = !sectorVal || item.sector === sectorVal;
         return matchesSearch && matchesSector;
     });
