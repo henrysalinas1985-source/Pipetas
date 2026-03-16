@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+</head>
+<body>
+<pre id="output" style="white-space: pre-wrap; font-family: monospace;">Loading...</pre>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+async function run() {
+    try {
+        const response = await fetch('../Pipetas 2025/16031392.pdf');
+        const arrayBuffer = await response.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        let fullText = '';
+        for(let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            fullText += textContent.items.map(item => item.str).join(' ') + '\n';
+        }
+        document.getElementById('output').innerText = fullText;
+    } catch(e) {
+        document.getElementById('output').innerText = "Error: " + e;
+    }
+}
+run();
+</script>
+</body>
+</html>

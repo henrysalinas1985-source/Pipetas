@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Pipetas</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- PDF.js for parsing certificates -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <!-- SheetJS for parsing Excel files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>Control de Pipetas</h1>
+            <div style="display: flex; gap: 1rem; align-items: center;">
+                <button id="add-btn" class="btn-primary">
+                    + NUEVA PIPETA
+                </button>
+                <button id="import-modal-btn" class="btn-primary" style="background: #10b981; border-color: #059669;">
+                    📥 IMPORTAR PDF(s)
+                </button>
+                <input type="file" id="import-file-input" accept=".pdf" multiple style="display: none;">
+                
+                <button id="import-excel-btn" class="btn-primary" style="background: #f59e0b; border-color: #d97706;">
+                    📊 IMPORTAR EXCEL
+                </button>
+                <input type="file" id="import-excel-input" accept=".xls, .xlsx, .csv" style="display: none;">
+                <button id="pdf-btn" class="btn-secondary">
+                    📄 EXPORTAR PDF
+                </button>
+            </div>
+            <div id="total-badge" class="badge badge-warning"
+                style="margin-left: 1rem; font-size: 1rem; padding: 0.5rem 1rem;">
+                TOTAL: <span id="total-count">0</span>
+            </div>
+        </header>
+
+        <div class="filter-section glass-card">
+            <div class="filter-group">
+                <label>BUSCAR (N° Serie, Marca o Modelo)</label>
+                <input type="text" id="search-text" placeholder="Ej: FJ25431 o Thermo...">
+            </div>
+            <div class="filter-group">
+                <label>FILTRAR POR SECTOR</label>
+                <select id="filter-sector">
+                    <option value="">TODOS LOS SECTORES</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Bulk Actions Bar -->
+        <div id="bulk-actions-bar" class="glass-card" style="display: none; margin-bottom: 2rem; background: rgba(14, 165, 233, 0.1); border-color: var(--primary);">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                <div style="font-weight: 600; color: #38bdf8;">
+                    <span id="selected-count">0</span> pipetas seleccionadas
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <label style="margin: 0; color: white; white-space: nowrap;">Mover a:</label>
+                    <select id="bulk-sector-select" style="min-width: 200px; padding: 0.5rem; background: #1e293b;">
+                        <option value="">-- Seleccionar Sector --</option>
+                        <option value="ZABALA">ZABALA</option>
+                        <option value="AGOTE">AGOTE</option>
+                        <option value="DLA">DLA</option>
+                        <option value="CYMSA">CYMSA</option>
+                        <option value="CLIO">CLIO</option>
+                        <option value="MICROCENTRO">MICROCENTRO</option>
+                        <option value="BARRIO PARQUE">BARRIO PARQUE</option>
+                        <option value="CATAMARCA">CATAMARCA</option>
+                    </select>
+                    <button id="bulk-apply-btn" class="btn-primary" style="padding: 0.5rem 1rem;">Aplicar</button>
+                </div>
+            </div>
+        </div>
+
+        <main class="glass-card">
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 40px; text-align: center;">
+                                <input type="checkbox" id="select-all-checkbox" style="width: auto; cursor: pointer;">
+                            </th>
+                            <th style="width: 50px;">#</th>
+                            <th>N° SERIE</th>
+                            <th>MARCA Y MODELO</th>
+                            <th>RANGO (VOLUMEN)</th>
+                            <th>SECTOR</th>
+                            <th>ÚLTIMA CALIBRACIÓN</th>
+                            <th>VENCIMIENTO</th>
+                            <th>CERTIFICADO</th>
+                            <th>ACCIONES</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pipette-list">
+                        <!-- Data will be injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal for Adding/Editing -->
+    <div id="modal-overlay">
+        <div class="modal glass-card">
+            <h2>Registrar Pipeta</h2>
+            <form id="pipette-form">
+                <div class="form-group">
+                    <label for="serie">N° SERIE</label>
+                    <input type="text" id="serie" required placeholder="Ej: FJ25431">
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <div class="form-group" style="flex: 1;">
+                        <label for="marca">MARCA</label>
+                        <input type="text" id="marca" required placeholder="Ej: Thermo">
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label for="modelo">MODELO</label>
+                        <input type="text" id="modelo" required placeholder="Ej: Monocanal">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="volumen">RANGO (VOLUMEN)</label>
+                    <input type="text" id="volumen" required placeholder="Ej: 100-1000 µl">
+                </div>
+                <div class="form-group">
+                    <label for="sector">SECTOR / UBICACIÓN</label>
+                    <input type="text" id="sector" required placeholder="Ej: Laboratorio">
+                </div>
+                <div class="form-group">
+                    <label for="codigo_interno">CÓDIGO INTERNO (Opcional)</label>
+                    <input type="text" id="codigo_interno" placeholder="Ej: 89 o Sede Catamarca">
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <div class="form-group" style="flex: 1;">
+                        <label for="calibracion">FECHA CALIBRACIÓN</label>
+                        <input type="text" id="calibracion" placeholder="dd/mm/aaaa" required>
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label for="vencimiento">VENCIMIENTO</label>
+                        <input type="text" id="vencimiento" placeholder="dd/mm/aaaa" required>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>CERTIFICADO (PDF)</label>
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <input type="file" id="file-input" style="display: none;" accept=".pdf">
+                        <button type="button" id="attach-btn" class="btn-success-outline"
+                            style="flex: 1.5; padding: 0.8rem;">
+                            ADJUNTAR PDF
+                        </button>
+                        <input type="text" id="certificado" readonly placeholder="Ningún archivo"
+                            style="flex: 2; font-style: italic; color: var(--text-muted); padding: 0.75rem;">
+                        <button type="button" id="remove-cert-btn" class="btn-danger"
+                            style="width: 45px; height: 45px; display: none; align-items: center; justify-content: center; padding: 0;"
+                            title="Quitar adjunto">
+                            ✕
+                        </button>
+                    </div>
+                    <small style="color: var(--text-muted); font-size: 0.75rem; display: block; margin-top: 0.5rem;">
+                        ⚠️ Asegúrate de que el archivo PDF esté en la misma carpeta o en "certificados".
+                    </small>
+                </div>
+                <div class="controls" style="margin-top: 2rem;">
+                    <button type="submit" class="btn-primary" style="flex: 2;">GUARDAR PIPETA</button>
+                    <button type="button" id="cancel-btn" class="btn-danger" style="flex: 1;">CANCELAR</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- PDF Export Modal -->
+    <div class="modal-overlay" id="modal-pdf-overlay">
+        <div class="modal-content" style="max-width: 400px; text-align: center;">
+            <h2 style="margin-top: 0; color: var(--text-color);">Nombrar Archivo PDF</h2>
+            <p style="color: var(--text-muted); margin-bottom: 20px;">Ingrese el nombre que desea para el archivo descargado. (Opcional)</p>
+            
+            <div class="form-group" style="text-align: left;">
+                <label for="pdf-filename">Nombre de Archivo</label>
+                <input type="text" id="pdf-filename" class="form-input" placeholder="Ej: Pipetas_Zabala_2024">
+            </div>
+
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button type="button" class="btn-secondary" id="pdf-cancel-btn">Cancelar</button>
+                <button type="button" class="btn-primary" id="pdf-confirm-btn">Descargar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Sector Modal -->
+    <div class="modal-overlay" id="import-modal-overlay">
+        <div class="modal-content" style="max-width: 500px; text-align: center;">
+            <h2 style="margin-top: 0; color: var(--text-color);">Importar a Sector</h2>
+            <p style="color: var(--text-muted); margin-bottom: 20px;">Seleccione a qué sector pertenecerán los certificados que va a importar.</p>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px;">
+                <button class="btn-primary sector-import-btn" style="background: #0ea5e9; border: none; padding: 12px;" data-sector="ZABALA">ZABALA</button>
+                <button class="btn-primary sector-import-btn" style="background: #0ea5e9; border: none; padding: 12px;" data-sector="AGOTE">AGOTE</button>
+                <button class="btn-primary sector-import-btn" style="background: #0ea5e9; border: none; padding: 12px;" data-sector="DLA">DLA</button>
+                <button class="btn-primary sector-import-btn" style="background: #0ea5e9; border: none; padding: 12px;" data-sector="CYMSA">CYMSA</button>
+                <button class="btn-primary sector-import-btn" style="background: #0ea5e9; border: none; padding: 12px;" data-sector="CLIO">CLIO</button>
+                <button class="btn-primary sector-import-btn" style="background: #0ea5e9; border: none; padding: 12px;" data-sector="MICROCENTRO">MICROCENTRO</button>
+                <button class="btn-primary sector-import-btn" style="background: #0ea5e9; border: none; padding: 12px;" data-sector="BARRIO PARQUE">BARRIO PARQUE</button>
+                <button class="btn-primary sector-import-btn" style="background: #0ea5e9; border: none; padding: 12px;" data-sector="CATAMARCA">CATAMARCA</button>
+            </div>
+
+            <div style="display: flex; justify-content: center;">
+                <button type="button" class="btn-secondary" id="import-cancel-btn" style="width: 100%;">CANCELAR IMPORTACIÓN</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
